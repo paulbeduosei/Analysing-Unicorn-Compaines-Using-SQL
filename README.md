@@ -1,31 +1,54 @@
-🏆 Top Industries Unicorn Analysis (SQL Project)
+# SQL-Project
 
-This project showcases my ability to perform end-to-end SQL analysis using real-world startup and funding data. The featured query, top_industries.sql, identifies the top 3 industries that created the most unicorns from 2019–2021 and produces clean, year-over-year insights for each one.
+This repository contains SQL queries used for analysis. Added below is the top_industries.sql query which finds the top 3 industries by unicorn count between 2019 and 2021 and returns year-by-year stats (2019–2021) including average valuation in billions.
 
-🔍 What I Built
-
-Using multi-step SQL logic, I created a pipeline that:
-
-- Extracts the top industries by unicorn count
-- Calculates annual unicorn totals per industry
-- Computes average valuations (in billions) using funding data
-- Generates a complete 2019–2021 timeline, even when an industry had zero unicorns
-- Outputs a clean, analysis-ready dataset sorted by industry and year
-
-💡 Skills Demonstrated
-
-- Complex SQL querying
-- CTEs for structured analysis
-- Windowed date filtering
-- Data cleaning (handling NULLs, standardizing valuations)
-- Joining multiple relational tables
-- Producing recruiter-friendly insights from raw data
-
-📈 Why This Project Matters
-
-This query mirrors the kind of work done in analytics, BI, and data engineering roles—turning fragmented tables into clear insights that help business teams understand industry trends, valuation patterns, and growth over time.
-It highlights my ability to:
-
-- Work with multi-table datasets
-- Build reusable analytical SQL
-- Think like an analyst and structure data for decision-making
+```sql
+WITH top_industries AS (
+  SELECT
+    i.industry,
+    COUNT(*) AS total_unicorns
+  FROM dates d
+  JOIN industries i ON d.company_id = i.company_id
+  WHERE EXTRACT(YEAR FROM d.date_joined) BETWEEN 2019 AND 2021
+  GROUP BY i.industry
+  ORDER BY total_unicorns DESC
+  LIMIT 3
+),
+industry_year_stats AS (
+  SELECT
+    i.industry,
+    EXTRACT(YEAR FROM d.date_joined) AS year,
+    COUNT(*) AS num_unicorns,
+    ROUND(AVG(f.valuation::numeric) / 1000000000.0, 2) AS average_valuation_billions
+  FROM dates d
+  JOIN industries i ON d.company_id = i.company_id
+  JOIN funding f ON d.company_id = f.company_id
+  WHERE EXTRACT(YEAR FROM d.date_joined) BETWEEN 2019 AND 2021
+    AND i.industry IN (SELECT industry FROM top_industries)
+    AND f.valuation IS NOT NULL
+  GROUP BY i.industry, EXTRACT(YEAR FROM d.date_joined)
+),
+expanded_years AS (
+  -- produce rows for each top industry for each year 2019-2021
+  SELECT industry, year
+  FROM top_industries
+  CROSS JOIN (VALUES (2019), (2020), (2021)) AS y(year)
+),
+final_stats AS (
+  SELECT
+    e.industry,
+    e.year,
+    COALESCE(iys.num_unicorns, 0) AS num_unicorns,
+    COALESCE(iys.average_valuation_billions, 0.00) AS average_valuation_billions
+  FROM expanded_years e
+  LEFT JOIN industry_year_stats iys
+    ON e.industry = iys.industry AND e.year = iys.year
+)
+SELECT
+  industry,
+  year,
+  num_unicorns,
+  average_valuation_billions
+FROM final_stats
+ORDER BY industry, year DESC;
+```
